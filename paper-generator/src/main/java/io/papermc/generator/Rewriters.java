@@ -176,7 +176,7 @@ public final class Rewriters {
             .register("PatternType", PatternType.class, new RegistryFieldRewriter<>(Registries.BANNER_PATTERN, "getType"))
             .register("Biome", Biome.class, new RegistryFieldRewriter<>(Registries.BIOME, "getBiome"))
             .register("Fluid", Fluid.class, new RegistryFieldRewriter<>(Registries.FLUID, "getFluid"))
-            .register("Attribute", Attribute.class, new RegistryFieldRewriter<>(Registries.ATTRIBUTE, "getAttribute"))
+            // .register("Attribute", Attribute.class, new RegistryFieldRewriter<>(Registries.ATTRIBUTE, "getAttribute")) - disable for now (javadocs)
             .register("Sound", Sound.class, new RegistryFieldRewriter<>(Registries.SOUND_EVENT, "getSound"))
             .register("Art", Art.class, new RegistryFieldRewriter<>(Registries.PAINTING_VARIANT, "getArt"))
             .register("ChickenVariant", Chicken.Variant.class, new RegistryFieldRewriter<>(Registries.CHICKEN_VARIANT, "getVariant"))
