@@ -9,10 +9,6 @@ paperweight {
     atFile.set(layout.projectDirectory.file("wideners.at"))
 }
 
-repositories {
-    mavenLocal() // todo publish typewriter somewhere
-}
-
 val serverRuntimeClasspath by configurations.registering { // resolvable?
     isCanBeConsumed = false
     isCanBeResolved = true
@@ -24,7 +20,7 @@ dependencies {
 
     implementation("com.squareup:javapoet:1.13.0")
     implementation(project(":paper-api"))
-    implementation("io.papermc.typewriter:typewriter:1.0-SNAPSHOT") {
+    implementation("io.papermc.typewriter:typewriter:1.0.1") {
         isTransitive = false // paper-api already have everything
     }
     implementation("info.picocli:picocli:4.7.6")
