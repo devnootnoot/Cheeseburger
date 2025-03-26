@@ -183,7 +183,7 @@ public final class Rewriters {
             .register("PigVariant", Pig.Variant.class, new RegistryFieldRewriter<>(Registries.PIG_VARIANT, "getVariant"))
             .register("MemoryKey", MemoryKey.class, new MemoryKeyRewriter())
             // .register("DataComponentTypes", DataComponentTypes.class, new DataComponentTypesRewriter()) - disable for now
-            .register("ItemType", ItemType.class, new ItemTypeRewriter())
+            // .register("ItemType", ItemType.class, new ItemTypeRewriter()) - disable for now, lynx want the generic type
             .register("BlockType", BlockType.class, new BlockTypeRewriter())
             .register("FeatureFlag", FeatureFlag.class, new FeatureFlagRewriter())
             .register("Tag", Tag.class, new TagRewriter())
