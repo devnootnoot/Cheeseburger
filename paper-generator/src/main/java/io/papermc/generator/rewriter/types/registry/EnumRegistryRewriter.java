@@ -25,7 +25,7 @@ import static io.papermc.generator.utils.Formatting.quoted;
 @ApiStatus.Obsolete
 public class EnumRegistryRewriter<T> extends EnumRewriter<Holder.Reference<T>> {
 
-    private final Registry<T> registry;
+    private final Supplier<Registry<T>> registry;
     private final Supplier<Map<ResourceKey<T>, SingleFlagHolder>> experimentalKeys;
     private final boolean isFilteredRegistry;
     private final boolean hasKeyArgument;
@@ -35,15 +35,15 @@ public class EnumRegistryRewriter<T> extends EnumRewriter<Holder.Reference<T>> {
     }
 
     protected EnumRegistryRewriter(ResourceKey<? extends Registry<T>> registryKey, boolean hasKeyArgument) {
-        this.registry = Main.REGISTRY_ACCESS.lookupOrThrow(registryKey);
-        this.experimentalKeys = Suppliers.memoize(() -> ExperimentalCollector.collectDataDrivenElementIds(this.registry));
+        this.registry = Suppliers.memoize(() -> Main.REGISTRY_ACCESS.lookupOrThrow(registryKey));
+        this.experimentalKeys = Suppliers.memoize(() -> ExperimentalCollector.collectDataDrivenElementIds(this.registry.get()));
         this.isFilteredRegistry = FeatureElement.FILTERED_REGISTRIES.contains(registryKey);
         this.hasKeyArgument = hasKeyArgument;
     }
 
     @Override
     protected Iterable<Holder.Reference<T>> getValues() {
-        return this.registry.listElements().sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath()))::iterator;
+        return this.registry.get().listElements().sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath()))::iterator;
     }
 
     @Override

@@ -45,10 +45,6 @@ public final class Formatting {
         return "\"" + value + "\"";
     }
 
-    public static String asCode(Enum<?> enumValue) {
-        return enumValue.getClass().getSimpleName() + "." + enumValue.name();
-    }
-
     public static String[] asCode(int... values) {
         return IntStream.of(values).mapToObj(Integer::toString).toArray(String[]::new);
     }

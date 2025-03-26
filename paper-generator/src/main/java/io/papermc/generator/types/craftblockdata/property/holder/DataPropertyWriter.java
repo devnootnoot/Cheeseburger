@@ -47,7 +47,7 @@ public class DataPropertyWriter extends DataPropertyWriterBase {
     }
 
     private static final Map<String, String> FIELD_TO_BASE_NAME = Map.of(
-        BlockStateMapping.PIPE_FIELD_NAME, "FACE"
+        "PROPERTY_BY_DIRECTION", "FACE"
     );
 
     private static final Map<FieldKey, String> FIELD_TO_BASE_NAME_SPECIFICS = Map.of(

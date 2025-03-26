@@ -27,6 +27,7 @@ dependencies {
     implementation("io.papermc.typewriter:typewriter:1.0-SNAPSHOT") {
         isTransitive = false // paper-api already have everything
     }
+    implementation("info.picocli:picocli:4.7.6")
     implementation("io.github.classgraph:classgraph:4.8.47")
     implementation("org.jetbrains:annotations:26.0.1")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
@@ -37,17 +38,20 @@ dependencies {
 
 val gameVersion = providers.gradleProperty("mcVersion")
 
-val rewriteApi = tasks.registerGenerationTask("rewriteApi", true, "paper-api") {
+val rewriteApi = tasks.registerGenerationTask("rewriteApi", true, "api", {
+    bootstrapTags = true
+    sourceSet = rootProject.layout.projectDirectory.dir("paper-api")
+}) {
     description = "Rewrite existing API classes"
-    mainClass.set("io.papermc.generator.Main\$Rewriter")
     classpath(sourceSets.main.map { it.runtimeClasspath })
 }
 
-val rewriteImpl = tasks.registerGenerationTask("rewriteImpl", true, "paper-server") {
+val rewriteImpl = tasks.registerGenerationTask("rewriteImpl", true, "impl", {
+    sourceSet = rootProject.layout.projectDirectory.dir("paper-server")
+    serverClassPath.from(serverRuntimeClasspath)
+}) {
     description = "Rewrite existing implementation classes"
-    mainClass.set("io.papermc.generator.Main\$Rewriter")
     classpath(sourceSets.main.map { it.runtimeClasspath })
-    args(serverRuntimeClasspath.get().asPath)
 }
 
 tasks.register("rewrite") {
@@ -57,15 +61,18 @@ tasks.register("rewrite") {
 }
 
 
-val generateApi = tasks.registerGenerationTask("generateApi", false, "paper-api") {
+val generateApi = tasks.registerGenerationTask("generateApi", false, "api", {
+    bootstrapTags = true
+    sourceSet = rootProject.layout.projectDirectory.dir("paper-api")
+}) {
     description = "Generate new API classes"
-    mainClass.set("io.papermc.generator.Main\$Generator")
     classpath(sourceSets.main.map { it.runtimeClasspath })
 }
 
-val generateImpl = tasks.registerGenerationTask("generateImpl", false, "paper-server") {
+val generateImpl = tasks.registerGenerationTask("generateImpl", false, "impl", {
+    sourceSet = rootProject.layout.projectDirectory.dir("paper-server")
+}) {
     description = "Generate new implementation classes"
-    mainClass.set("io.papermc.generator.Main\$Generator")
     classpath(sourceSets.main.map { it.runtimeClasspath })
 }
 
@@ -99,7 +106,8 @@ if (providers.gradleProperty("updatingMinecraft").getOrElse("false").toBoolean()
 fun TaskContainer.registerGenerationTask(
     name: String,
     rewrite: Boolean,
-    vararg targetProjects: String,
+    side: String,
+    args: (GenerationArgumentProvider.() -> Unit)? = null,
     block: JavaExec.() -> Unit
 ): TaskProvider<JavaExec> = register<JavaExec>(name) {
     group = "generation"
@@ -107,18 +115,63 @@ fun TaskContainer.registerGenerationTask(
     javaLauncher = project.javaToolchains.defaultJavaLauncher(project)
     inputs.property("gameVersion", gameVersion)
     inputs.dir(layout.projectDirectory.dir("src/main/java")).withPathSensitivity(PathSensitivity.RELATIVE)
-    val projectDirs = targetProjects.map { rootProject.layout.projectDirectory.dir(it) }
-    args(projectDirs.map { it.asFile.absolutePath })
+    mainClass.set("io.papermc.generator.Main")
     systemProperty("paper.updatingMinecraft", providers.gradleProperty("updatingMinecraft").getOrElse("false").toBoolean())
-    if (rewrite) {
-        val source = projectDirs.map { it.dir("src/main/java") }
-        source.forEach { inputs.dir(it) }
-        outputs.dirs(source)
-    } else {
-        outputs.dirs(projectDirs.map { it.dir("src/generated/java") })
+
+    val provider = objects.newInstance<GenerationArgumentProvider>()
+    provider.side = side
+    provider.rewrite = rewrite
+    if (args != null) {
+        args(provider)
     }
+    argumentProviders.add(provider)
+
+    val targetDir = if (rewrite) "src/main/java" else "src/generated/java"
+    outputs.dir(provider.sourceSet.dir(targetDir))
 
     block(this)
+}
+
+@Suppress("LeakingThis")
+abstract class GenerationArgumentProvider : CommandLineArgumentProvider {
+
+    @get:PathSensitive(PathSensitivity.NONE)
+    @get:InputDirectory
+    abstract val sourceSet: DirectoryProperty
+
+    @get:Input
+    abstract val rewrite: Property<Boolean>
+
+    @get:Input
+    abstract val side: Property<String>
+
+    @get:CompileClasspath
+    abstract val serverClassPath: ConfigurableFileCollection
+
+    @get:Input
+    @get:Optional
+    abstract val bootstrapTags: Property<Boolean>
+
+    init {
+        bootstrapTags.convention(false)
+    }
+
+    override fun asArguments(): Iterable<String> {
+        val args = mutableListOf<String>()
+
+        args.add("--sourceset=${sourceSet.get().asFile.absolutePath}")
+        args.add("--side=${side.get()}")
+        args.add("--classpath=${serverClassPath.asPath}")
+
+        if (rewrite.get()) {
+            args.add("--rewrite")
+        }
+
+        if (bootstrapTags.get()) {
+            args.add(("--bootstrap-tags"))
+        }
+        return args.toList()
+    }
 }
 
 tasks.test {

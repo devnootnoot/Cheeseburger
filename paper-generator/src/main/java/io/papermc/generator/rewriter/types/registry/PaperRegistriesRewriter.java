@@ -5,10 +5,13 @@ import io.papermc.generator.registry.RegistryEntries;
 import io.papermc.generator.registry.RegistryEntry;
 import io.papermc.generator.rewriter.types.Types;
 import io.papermc.paper.registry.RegistryKey;
+import io.papermc.typewriter.ClassNamed;
 import io.papermc.typewriter.replace.SearchMetadata;
 import io.papermc.typewriter.replace.SearchReplaceRewriter;
 import java.lang.constant.ConstantDescs;
+import java.util.stream.Stream;
 import net.minecraft.core.registries.Registries;
+import org.bukkit.Keyed;
 import org.bukkit.Registry;
 import org.jspecify.annotations.NullMarked;
 
@@ -37,7 +40,7 @@ public class PaperRegistriesRewriter extends SearchReplaceRewriter {
             builder.append(this.importCollector.getShortName(entry.preloadClass())).append(".class");
             builder.append(", ");
 
-            builder.append(this.importCollector.getShortName(this.classNamedView.findFirst(entry.implClass()).resolve(this.classResolver))).append("::").append(entry.apiAccessName().equals(ConstantDescs.INIT_NAME) ? "new" : entry.apiAccessName());
+            builder.append(this.importCollector.getShortName(this.getImplClassName(entry))).append("::").append(entry.apiAccessName().equals(ConstantDescs.INIT_NAME) ? "new" : entry.apiAccessName());
 
             if (entry.canAllowDirect()) {
                 builder.append(", ");
@@ -90,5 +93,13 @@ public class PaperRegistriesRewriter extends SearchReplaceRewriter {
         }
 
         builder.deleteCharAt(builder.length() - 2); // delete extra comma...
+    }
+
+    private ClassNamed getImplClassName(RegistryEntry<?> entry) {
+        try (Stream<ClassNamed> stream = this.classNamedView.find(entry.implClass())) {
+            return stream.map(klass -> klass.resolve(this.classResolver))
+                .filter(klass -> Keyed.class.isAssignableFrom(klass.knownClass())) // todo check handleable/holderable once keyed is gone
+                .findFirst().orElseThrow();
+        }
     }
 }

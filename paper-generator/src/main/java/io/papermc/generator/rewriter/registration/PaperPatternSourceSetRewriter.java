@@ -38,10 +38,6 @@ public class PaperPatternSourceSetRewriter extends SourceSetRewriterImpl<Pattern
         super(SourcesMetadata.of(INDENT_UNIT, b -> b.classpath(classpath))); // let the runtime java version since it will always be in sync with what paperweight use
     }
 
-    public static PaperPatternSourceSetRewriter from(String classpath) {
-        return new PaperPatternSourceSetRewriter(Arrays.stream(classpath.split(File.pathSeparator)).map(Path::of).collect(Collectors.toSet()));
-    }
-
     @VisibleForTesting
     public SourcesMetadata getMetadata() {
         return this.metadata;

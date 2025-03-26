@@ -16,7 +16,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
@@ -42,7 +41,6 @@ import net.minecraft.world.level.block.state.properties.BambooLeaves;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.BellAttachType;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.block.state.properties.ComparatorMode;
 import net.minecraft.world.level.block.state.properties.CreakingHeartState;
@@ -114,8 +112,6 @@ import org.jspecify.annotations.Nullable;
 @NullMarked
 public final class BlockStateMapping {
 
-    public static final String PIPE_FIELD_NAME = "PROPERTY_BY_DIRECTION";
-
     public record BlockData(String implName, @Nullable Class<? extends org.bukkit.block.data.BlockData> api,
                             Collection<? extends Property<?>> properties, Map<Property<?>, Field> propertyFields,
                             Multimap<Either<Field, VirtualField>, Property<?>> complexPropertyFields) {
@@ -148,14 +144,6 @@ public final class BlockStateMapping {
 
     // virtual data that doesn't exist as constant in the source but still organized this way in the api
     public static final ImmutableMultimap<Class<?>, VirtualField> VIRTUAL_NODES = ImmutableMultimap.<Class<?>, VirtualField>builder()
-        /*.put(WallBlock.class,
-            VirtualField.createMap("PROPERTY_BY_FACE", BlockFace.class, new TypeToken<EnumProperty<WallSide>>() {}, "HEIGHT")
-            .withValues(List.of(
-                WallBlock.EAST,
-                WallBlock.NORTH,
-                WallBlock.SOUTH,
-                WallBlock.WEST
-            )).make())*/
         .build();
 
     public static final Map<Property<?>, Field> FALLBACK_GENERIC_FIELDS;
@@ -190,27 +178,10 @@ public final class BlockStateMapping {
                     propertyFields.put(property, field);
                 }
             }, (field, property) -> {
-                if (field.getName().equals(BlockStateMapping.PIPE_FIELD_NAME) &&
-                    PipeBlock.PROPERTY_BY_DIRECTION.containsValue(property)) { // need another check to avoid conflict with redstone connection
-                    // handled later with further check
-                    return;
-                }
-
                 if (properties.remove(property)) { // handle those separately and only count if the property was in the state definition
                     complexPropertyFields.put(Either.left(field), property);
                 }
             });
-
-            // multiple facing
-            List<Property<?>> commonPipeProperties = new ArrayList<>(properties);
-            commonPipeProperties.retainAll(PipeBlock.PROPERTY_BY_DIRECTION.values());
-            if (commonPipeProperties.size() >= 2) {
-                Field field = fetchPipeFieldMap(specialBlock);
-                if (field != null) {
-                    properties.removeAll(commonPipeProperties);
-                    complexPropertyFields.putAll(Either.left(field), commonPipeProperties);
-                }
-            }
 
             // virtual nodes
             if (VIRTUAL_NODES.containsKey(specialBlock)) {
@@ -395,46 +366,6 @@ public final class BlockStateMapping {
             return apiName.substring(0, apiName.length() - "Block".length());
         }
         return apiName;
-    }
-
-    private static @Nullable Field fetchPipeFieldMap(Class<?> block) {
-        Field field = null;
-        Class<?> searchClass = block;
-        do {
-            try {
-                field = searchClass.getDeclaredField(PIPE_FIELD_NAME);
-            } catch (NoSuchFieldException ignored) {
-            }
-            searchClass = searchClass.getSuperclass();
-        } while (field == null && searchClass != Block.class);
-
-        if (field == null) {
-            return null;
-        }
-
-        if (!ClassHelper.isStaticConstant(field, 0)) {
-            return null;
-        }
-
-        if (Map.class.isAssignableFrom(field.getType()) && field.getGenericType() instanceof ParameterizedType complexType) {
-            Type[] args = complexType.getActualTypeArguments();
-            if (args.length == 2 && args[0] == Direction.class && args[1] == BooleanProperty.class) {
-                if (field.trySetAccessible()) {
-                    try {
-                        List<BooleanProperty> properties = new ArrayList<>(((Map<Direction, BooleanProperty>) field.get(null)).values());
-                        int originalSize = properties.size();
-                        properties.retainAll(PipeBlock.PROPERTY_BY_DIRECTION.values());
-                        if (properties.size() != originalSize) {
-                            return null;
-                        }
-                    } catch (ReflectiveOperationException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-                return field;
-            }
-        }
-        return null;
     }
 
     private static boolean handleComplexType(Field field, BiConsumer<Field, Property<?>> complexCallback) throws IllegalAccessException {

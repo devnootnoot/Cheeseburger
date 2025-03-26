@@ -21,11 +21,11 @@ public class CraftMultiface extends CraftBlockData implements ResinClump {
 
     private static final Map<BlockFace, BooleanProperty> PROPERTY_BY_DIRECTION = Map.of(
         BlockFace.DOWN, BlockStateProperties.DOWN,
-        BlockFace.EAST, BlockStateProperties.EAST,
+        BlockFace.UP, BlockStateProperties.UP,
         BlockFace.NORTH, BlockStateProperties.NORTH,
         BlockFace.SOUTH, BlockStateProperties.SOUTH,
-        BlockFace.UP, BlockStateProperties.UP,
-        BlockFace.WEST, BlockStateProperties.WEST
+        BlockFace.WEST, BlockStateProperties.WEST,
+        BlockFace.EAST, BlockStateProperties.EAST
     );
 
     public CraftMultiface(BlockState state) {

@@ -39,12 +39,7 @@ for (name in listOf("paper-api", "paper-server")) {
 }
 
 optionalInclude("test-plugin")
-
-if (providers.gradleProperty("updatingMinecraft").getOrElse("false").toBoolean()) {
-    include("paper-generator")
-} else {
-    optionalInclude("paper-generator")
-}
+optionalInclude("paper-generator")
 
 fun optionalInclude(name: String, op: (ProjectDescriptor.() -> Unit)? = null) {
     val settingsFile = file("$name.settings.gradle.kts")

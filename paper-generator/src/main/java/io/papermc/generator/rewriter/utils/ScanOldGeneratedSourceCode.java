@@ -1,5 +1,6 @@
 package io.papermc.generator.rewriter.utils;
 
+import io.papermc.generator.Main;
 import io.papermc.generator.Rewriters;
 import io.papermc.generator.rewriter.registration.PaperPatternSourceSetRewriter;
 import io.papermc.paper.generated.GeneratedFrom;
@@ -28,7 +29,7 @@ public class ScanOldGeneratedSourceCode {
     private static final String CURRENT_VERSION;
 
     static {
-        SharedConstants.tryDetectVersion();
+        Main.bootStrap(false);
         CURRENT_VERSION = SharedConstants.getCurrentVersion().getId();
     }
 
@@ -43,7 +44,7 @@ public class ScanOldGeneratedSourceCode {
     }
 
     private static void checkOutdated(PaperPatternSourceSetRewriter sourceSetRewriter, Path sourceSet) throws IOException {
-        IndentUnit globalIndentUnit = sourceSetRewriter.getMetadata().indentUnit();;
+        IndentUnit globalIndentUnit = sourceSetRewriter.getMetadata().indentUnit();
         for (Map.Entry<SourceFile, SourceRewriter> entry : sourceSetRewriter.getRewriters().entrySet()) {
             SourceRewriter rewriter = entry.getValue();
             if (!(rewriter instanceof SearchReplaceRewriterBase srt) ||

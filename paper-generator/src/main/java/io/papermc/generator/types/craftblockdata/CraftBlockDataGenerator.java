@@ -58,10 +58,6 @@ public class CraftBlockDataGenerator<T extends BlockData> extends OverriddenClas
         this.printWarningOnMissingOverride = true;
     }
 
-    public BlockStateMapping.BlockData getBlockData() {
-        return this.blockData;
-    }
-
     // default keywords: get/set
     // for single boolean property: get = is
     // for indexed boolean property: get = has

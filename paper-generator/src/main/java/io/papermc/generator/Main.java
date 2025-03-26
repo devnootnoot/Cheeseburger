@@ -12,6 +12,10 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.HolderLookup;
@@ -31,17 +35,37 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.tags.TagLoader;
 import net.minecraft.world.flag.FeatureFlags;
 import org.apache.commons.io.file.PathUtils;
-import org.jspecify.annotations.NullMarked;
+import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.slf4j.Logger;
+import picocli.CommandLine;
 
-@NullMarked
-public class Main {
+@CommandLine.Command(
+    name = "generator",
+    description = "Rewrite and generate API classes and its implementation for Paper"
+)
+public class Main implements Callable<Integer> {
+
+    @CommandLine.Option(names = {"--sourceset"}, required = true)
+    Path sourceSet;
+
+    @CommandLine.Option(names = {"-cp", "--classpath"}, split = ":", required = true)
+    Set<Path> classpath;
+
+    @CommandLine.Option(names = {"--rewrite"})
+    boolean isRewrite;
+
+    @CommandLine.Option(names = {"--side"}, required = true)
+    String side;
+
+    @CommandLine.Option(names = {"--bootstrap-tags"})
+    boolean tagBootstrap;
 
     private static final Logger LOGGER = LogUtils.getLogger();
-    public static final RegistryAccess.Frozen REGISTRY_ACCESS;
-    public static final Map<TagKey<?>, String> EXPERIMENTAL_TAGS;
 
-    static {
+    public static RegistryAccess.@MonotonicNonNull Frozen REGISTRY_ACCESS;
+    public static @MonotonicNonNull Map<TagKey<?>, String> EXPERIMENTAL_TAGS;
+
+    public static CompletableFuture<Void> bootStrap(boolean withTags) {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
         Bootstrap.validate();
@@ -55,63 +79,67 @@ public class Main {
         RegistryAccess.Frozen frozenWorldgenRegistries = RegistryDataLoader.load(resourceManager, worldGenLayer, RegistryDataLoader.WORLDGEN_REGISTRIES);
         layers = layers.replaceFrom(RegistryLayer.WORLDGEN, frozenWorldgenRegistries);
         REGISTRY_ACCESS = layers.compositeAccess().freeze();
-        ReloadableServerResources reloadableServerResources = ReloadableServerResources.loadResources(
-            resourceManager,
-            layers,
-            pendingTags,
-            FeatureFlags.VANILLA_SET,
-            Commands.CommandSelection.DEDICATED,
-            0,
-            MoreExecutors.directExecutor(),
-            MoreExecutors.directExecutor()
-        ).join();
-        reloadableServerResources.updateStaticRegistryTags();
-        EXPERIMENTAL_TAGS = ExperimentalCollector.collectTags(resourceManager);
-    }
-
-    private Main() {
-    }
-
-    public static class Rewriter extends Main {
-
-        public static void main(String[] args) {
-            boolean isApi = args[0].endsWith("-api");
-            PatternSourceSetRewriter sourceSet = args.length >= 2 ? PaperPatternSourceSetRewriter.from(args[1]) : new PaperPatternSourceSetRewriter();
-            (isApi ? Rewriters.API : Rewriters.SERVER).accept(sourceSet);
-            try {
-                sourceSet.apply(Path.of(args[0], "src/main/java"));
-            } catch (RuntimeException ex) {
-                throw ex;
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+        if (withTags) {
+            return ReloadableServerResources.loadResources(
+                resourceManager,
+                layers,
+                pendingTags,
+                FeatureFlags.VANILLA_SET,
+                Commands.CommandSelection.DEDICATED,
+                0,
+                MoreExecutors.directExecutor(),
+                MoreExecutors.directExecutor()
+            ).whenComplete((result, ex) -> {
+                if (ex != null) {
+                    resourceManager.close();
+                }
+            }).thenAccept(resources -> {
+                resources.updateStaticRegistryTags();
+                EXPERIMENTAL_TAGS = ExperimentalCollector.collectTags(resourceManager);
+            });
+        } else {
+            EXPERIMENTAL_TAGS = Map.of();
+            return CompletableFuture.completedFuture(null);
         }
     }
 
-    public static class Generator extends Main {
+    @Override
+    public Integer call() {
+        bootStrap(this.tagBootstrap).join();
 
-        public static void main(String[] args) {
-            boolean isApi = args[0].endsWith("-api");
-
-            try {
-                generate(Path.of(args[0]), isApi ? Generators.API : Generators.SERVER);
-            } catch (RuntimeException ex) {
-                throw ex;
-            } catch (Exception e) {
-                throw new RuntimeException(e);
+        try {
+            if (this.isRewrite) {
+                rewrite(this.sourceSet, this.classpath, this.side.equals("api") ? Rewriters.API : Rewriters.SERVER);
+            } else {
+                generate(this.sourceSet, this.side.equals("api") ? Generators.API : Generators.SERVER);
             }
+        } catch (RuntimeException ex) {
+            throw ex;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return 0;
+    }
+
+    private static void rewrite(Path sourceSet, Set<Path> classpath, Consumer<PatternSourceSetRewriter> rewriters) throws IOException {
+        PatternSourceSetRewriter sourceSetRewriter = new PaperPatternSourceSetRewriter(classpath);
+        rewriters.accept(sourceSetRewriter);
+        sourceSetRewriter.apply(sourceSet.resolve("src/main/java"));
+    }
+
+    private static void generate(Path sourceSet, Collection<SourceGenerator> generators) throws IOException {
+        Path output = sourceSet.resolve("src/generated/java");
+        if (Files.exists(output)) {
+            PathUtils.deleteDirectory(output);
         }
 
-        private static void generate(Path sourceSet, Collection<SourceGenerator> generators) throws IOException {
-            Path output = sourceSet.resolve("src/generated/java");
-            if (Files.exists(output)) {
-                PathUtils.deleteDirectory(output);
-            }
-
-            for (SourceGenerator generator : generators) {
-                generator.writeToFile(output);
-            }
-            LOGGER.info("Files written to {}", output.toAbsolutePath());
+        for (SourceGenerator generator : generators) {
+            generator.writeToFile(output);
         }
+        LOGGER.info("Files written to {}", output.toAbsolutePath());
+    }
+
+    public static void main(String[] args) {
+        System.exit(new CommandLine(new Main()).execute(args));
     }
 }

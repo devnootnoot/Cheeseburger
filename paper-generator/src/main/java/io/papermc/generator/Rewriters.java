@@ -46,7 +46,6 @@ import org.bukkit.MusicInstrument;
 import org.bukkit.Sound;
 import org.bukkit.Statistic;
 import org.bukkit.Tag;
-import org.bukkit.attribute.Attribute;
 import org.bukkit.block.Biome;
 import org.bukkit.block.BlockType;
 import org.bukkit.block.banner.PatternType;
