@@ -27,6 +27,7 @@ public class Main {
 
     public static void main(String[] args) {
         // Paper start
+        System.out.println("CHEESEBURGER STARTING UP");
         final String warnWhenLegacyFormattingDetected = String.join(".", "net", "kyori", "adventure", "text", "warnWhenLegacyFormattingDetected");
         if (false && System.getProperty(warnWhenLegacyFormattingDetected) == null) {
             System.setProperty(warnWhenLegacyFormattingDetected, String.valueOf(true));
