@@ -22,6 +22,7 @@ import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -68,6 +69,8 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
+import org.avalon.cheeseburger.WorldAccessTracker;
+import org.avalon.cheeseburger.WorldThreadExecutor;
 import org.bukkit.BlockChangeDelegate;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -446,48 +449,59 @@ public class CraftWorld extends CraftRegionAccessor implements World {
 
     @Override
     public boolean unloadChunkRequest(int x, int z) {
-        org.spigotmc.AsyncCatcher.catchOp("chunk unload"); // Spigot
-        if (this.isChunkLoaded(x, z)) {
-            this.world.getChunkSource().removeRegionTicket(TicketType.PLUGIN, new ChunkPos(x, z), 1, Unit.INSTANCE);
-        }
+        // org.spigotmc.AsyncCatcher.catchOp("chunk unload"); // Spigot
+        WorldAccessTracker.track(world, "(CraftWorld):write:unloadChunkRequest");
+        return WorldThreadExecutor.getOrSchedule(()->{
+            if (this.isChunkLoaded(x, z)) {
+                this.world.getChunkSource().removeRegionTicket(TicketType.PLUGIN, new ChunkPos(x, z), 1, Unit.INSTANCE);
+            }
 
-        return true;
+            return true;
+        });
+
     }
 
     private boolean unloadChunk0(int x, int z, boolean save) {
-        org.spigotmc.AsyncCatcher.catchOp("chunk unload"); // Spigot
-        if (!this.isChunkLoaded(x, z)) {
-            return true;
-        }
-        net.minecraft.world.level.chunk.LevelChunk chunk = this.world.getChunk(x, z);
+        // org.spigotmc.AsyncCatcher.catchOp("chunk unload"); // Spigot
+        WorldAccessTracker.track(world, "(CraftWorld):write:unloadChunk0");
+        return WorldThreadExecutor.getOrSchedule(()->{
+            if (!this.isChunkLoaded(x, z)) {
+                return true;
+            }
+            net.minecraft.world.level.chunk.LevelChunk chunk = this.world.getChunk(x, z);
 
-        if (!save) {
-            chunk.tryMarkSaved(); // Use method call to account for persistentDataContainer
-        }
-        this.unloadChunkRequest(x, z);
+            if (!save) {
+                chunk.tryMarkSaved(); // Use method call to account for persistentDataContainer
+            }
+            this.unloadChunkRequest(x, z);
 
-        this.world.getChunkSource().purgeUnload();
-        return !this.isChunkLoaded(x, z);
+            this.world.getChunkSource().purgeUnload();
+            return !this.isChunkLoaded(x, z);
+        });
+
     }
 
     @Override
     public boolean refreshChunk(int x, int z) {
-        ChunkHolder playerChunk = this.world.getChunkSource().chunkMap.getVisibleChunkIfPresent(ChunkPos.asLong(x, z));
-        if (playerChunk == null) return false;
+        WorldAccessTracker.track(world, "(CraftWorld):write:refreshChunk");
+        return WorldThreadExecutor.getOrSchedule(()->{
+            ChunkHolder playerChunk = this.world.getChunkSource().chunkMap.getVisibleChunkIfPresent(ChunkPos.asLong(x, z));
+            if (playerChunk == null) return false;
 
-        // Paper start - chunk system
-        net.minecraft.world.level.chunk.LevelChunk chunk = playerChunk.getChunkToSend();
-        if (chunk == null) {
-            return false;
-        }
-        // Paper end - chunk system
-                List<ServerPlayer> playersInRange = playerChunk.playerProvider.getPlayers(playerChunk.getPos(), false);
-                if (playersInRange.isEmpty()) return true; // Paper - chunk system
+            // Paper start - chunk system
+            net.minecraft.world.level.chunk.LevelChunk chunk = playerChunk.getChunkToSend();
+            if (chunk == null) {
+                return false;
+            }
+            // Paper end - chunk system
+            List<ServerPlayer> playersInRange = playerChunk.playerProvider.getPlayers(playerChunk.getPos(), false);
+            if (playersInRange.isEmpty()) return true; // Paper - chunk system
 
-                FeatureHooks.sendChunkRefreshPackets(playersInRange, chunk);
-        // Paper - chunk system
+            FeatureHooks.sendChunkRefreshPackets(playersInRange, chunk);
+            // Paper - chunk system
 
-        return true;
+            return true;
+        });
     }
 
     @Override
@@ -522,22 +536,25 @@ public class CraftWorld extends CraftRegionAccessor implements World {
 
     @Override
     public boolean loadChunk(int x, int z, boolean generate) {
-        org.spigotmc.AsyncCatcher.catchOp("chunk load"); // Spigot
-        warnUnsafeChunk("loading a faraway chunk", x, z); // Paper
-        ChunkAccess chunk = this.world.getChunkSource().getChunk(x, z, generate || isChunkGenerated(x, z) ? ChunkStatus.FULL : ChunkStatus.EMPTY, true); // Paper
+        // org.spigotmc.AsyncCatcher.catchOp("chunk load"); // Spigot
+        WorldAccessTracker.track(this.world, "(CraftWorld):read:loadChunk");
+        return WorldThreadExecutor.getOrSchedule(()->{
+            warnUnsafeChunk("loading a faraway chunk", x, z); // Paper
+            ChunkAccess chunk = this.world.getChunkSource().getChunk(x, z, generate || isChunkGenerated(x, z) ? ChunkStatus.FULL : ChunkStatus.EMPTY, true); // Paper
 
-        // If generate = false, but the chunk already exists, we will get this back.
-        if (chunk instanceof ImposterProtoChunk) {
-            // We then cycle through again to get the full chunk immediately, rather than after the ticket addition
-            chunk = this.world.getChunkSource().getChunk(x, z, ChunkStatus.FULL, true);
-        }
+            // If generate = false, but the chunk already exists, we will get this back.
+            if (chunk instanceof ImposterProtoChunk) {
+                // We then cycle through again to get the full chunk immediately, rather than after the ticket addition
+                chunk = this.world.getChunkSource().getChunk(x, z, ChunkStatus.FULL, true);
+            }
 
-        if (chunk instanceof net.minecraft.world.level.chunk.LevelChunk) {
-            this.world.getChunkSource().addRegionTicket(TicketType.PLUGIN, new ChunkPos(x, z), 1, Unit.INSTANCE);
-            return true;
-        }
+            if (chunk instanceof net.minecraft.world.level.chunk.LevelChunk) {
+                this.world.getChunkSource().addRegionTicket(TicketType.PLUGIN, new ChunkPos(x, z), 1, Unit.INSTANCE);
+                return true;
+            }
 
-        return false;
+            return false;
+        });
     }
 
     @Override
@@ -1417,19 +1434,23 @@ public class CraftWorld extends CraftRegionAccessor implements World {
         Preconditions.checkArgument(location != null, "Location cannot be null");
         Preconditions.checkArgument(location.getWorld() != null, "World of Location cannot be null");
         int packetData = effect.getId();
-        ClientboundLevelEventPacket packet = new ClientboundLevelEventPacket(packetData, CraftLocation.toBlockPosition(location), data, false);
-        int distance;
+        final AtomicInteger distance = new AtomicInteger();
         radius *= radius;
+        final int finalRadius = radius;
+        WorldThreadExecutor.runAfterWorldTick(()->{
+            ClientboundLevelEventPacket packet = new ClientboundLevelEventPacket(packetData, CraftLocation.toBlockPosition(location), data, false);
 
-        for (Player player : this.getPlayers()) {
-            if (((CraftPlayer) player).getHandle().connection == null) continue;
-            if (!location.getWorld().equals(player.getWorld())) continue;
+            for (Player player : this.getPlayers()) {
+                ((CraftPlayer) player).getHandle();
+                if (!location.getWorld().equals(player.getWorld())) continue;
 
-            distance = (int) player.getLocation().distanceSquared(location);
-            if (distance <= radius) {
-                ((CraftPlayer) player).getHandle().connection.send(packet);
+                distance.set((int) player.getLocation().distanceSquared(location));
+                if (distance.get() <= finalRadius) {
+                    ((CraftPlayer) player).getHandle().connection.send(packet);
+                }
             }
-        }
+        });
+
     }
 
     @Override
